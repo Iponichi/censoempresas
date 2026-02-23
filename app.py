@@ -1,4 +1,4 @@
-from data_access import fetch_sample_companies
+from data_access import search_companies
 
 import csv
 import io
@@ -16,9 +16,9 @@ with st.sidebar:
     reference_date = st.date_input("Fecha de referencia", value=date.today())
     active_only = st.checkbox("Solo empresas activas", value=True)
 
-    province = st.selectbox("Provincia", options=["", "Barcelona", "Madrid", "Valencia"])
-    city = st.selectbox("Población", options=["", "Barcelona", "Madrid", "Valencia"])
-    epigraph_codes = st.multiselect("Epígrafe", options=["011", "123", "456"])
+    province = st.selectbox("Provincia", options=["", "Navarra", "Madrid", "Alava"])
+    city = st.selectbox("localidad", options=["", "Pamplona", "Tudela", "Elizondo"])
+    epigraph_codes = st.multiselect("Epigrafe", options=["011", "123", "456"])
 
     search_clicked = st.button("Buscar", type="primary")
 
@@ -29,9 +29,12 @@ st.caption(
 
 if search_clicked:
     try:
-        rows = fetch_sample_companies(
+        rows = search_companies(
             reference_date=reference_date,
-            limit=10
+            active_only=active_only,
+            province=province if province else None,
+            city=city if city else None,
+            limit=200
         )
     except Exception as ex:
         st.error(f"Database error: {ex}")

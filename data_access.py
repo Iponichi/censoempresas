@@ -85,26 +85,70 @@ def test_connection(engine: Engine) -> str:
     return f"Connected (SELECT 1 returned {value})"
 
 from datetime import date
-from typing import Any
+from typing import Any, Optional
 
-def fetch_sample_companies(reference_date: date, limit: int = 10) -> list[dict[str, Any]]:
+from sqlalchemy import text
+
+def search_companies(
+    reference_date: date,
+    active_only: bool,
+    province: Optional[str],
+    city: Optional[str],
+    limit: int = 200,
+) -> list[dict[str, Any]]:
     """
-    Simple query to validate end-to-end flow from Streamlit to SQL Server.
-    Adjust column names if needed.
+    Search companies applying the mandatory 'active' business rule via EXISTS on CENSO2:
+      F_INI <= reference_date AND F_FIN > reference_date
+    Filters:
+      - province (CENSO1.PROVINCIA)
+      - city (CENSO1.POBLACION)
+      - active_only (EXISTS in CENSO2 for reference_date)
     """
     engine = create_db_engine()
 
-    sql = text(f"""
-        SELECT TOP ({limit})
-            c1.dni,
+    where_clauses: list[str] = []
+    params: dict[str, Any] = {"limit": limit, "reference_date": reference_date}
+
+    if province:
+        where_clauses.append("c1.PROVINCIA = :province")
+        params["province"] = province
+
+    if city:
+        where_clauses.append("c1.POBLACION = :city")
+        params["city"] = city
+
+    if active_only:
+        where_clauses.append(
+            """
+            EXISTS (
+                SELECT 1
+                FROM CENSO2 c2
+                WHERE c2.tax_id = c1.tax_id
+                  AND c2.F_INI <= :reference_date
+                  AND c2.F_FIN > :reference_date
+            )
+            """
+        )
+
+    where_sql = ""
+    if where_clauses:
+        where_sql = "WHERE " + " AND ".join(f"({c})" for c in where_clauses)
+
+    sql = text(
+        f"""
+        SELECT TOP (:limit)
+            c1.tax_id,
             c1.NOMBRE AS nombre,
             c1.PROVINCIA AS provincia,
-            c1.LOCALIDAD AS localidad
+            c1.POBLACION AS poblacion
         FROM CENSO1 c1
-        ORDER BY c1.dni
-    """)
+        {where_sql}
+        ORDER BY c1.tax_id
+        """
+    )
 
     with engine.connect() as conn:
-        rows = conn.execute(sql).mappings().all()
+        rows = conn.execute(sql, params).mappings().all()
 
     return [dict(r) for r in rows]
+
