@@ -7,6 +7,11 @@ from dotenv import load_dotenv
 from sqlalchemy import Engine, create_engine, text
 from sqlalchemy.engine import URL
 
+from datetime import date
+from typing import Any, Optional
+
+
+
 
 @dataclass(frozen=True)
 class Db_config:
@@ -84,71 +89,127 @@ def test_connection(engine: Engine) -> str:
         value = conn.execute(text("SELECT 1 AS ok")).scalar_one()
     return f"Connected (SELECT 1 returned {value})"
 
-from datetime import date
-from typing import Any, Optional
 
-from sqlalchemy import text
+def get_provinces() -> list[str]:
+    engine = create_db_engine()
+    sql = text("""
+        SELECT DISTINCT c1.PROVINCIA
+        FROM CENSO1 c1
+        WHERE c1.PROVINCIA IS NOT NULL
+          AND LTRIM(RTRIM(c1.PROVINCIA)) <> ''
+        ORDER BY c1.PROVINCIA
+    """)
+    with engine.connect() as conn:
+        rows = conn.execute(sql).scalars().all()
+    return [r for r in rows if r]
+
+
+def get_cities(province: Optional[str]) -> list[str]:
+    """
+    If province is provided, returns cities for that province only.
+    """
+    engine = create_db_engine()
+
+    if province:
+        sql = text("""
+            SELECT DISTINCT c1.LOCALIDAD
+            FROM CENSO1 c1
+            WHERE c1.PROVINCIA = :province
+              AND c1.LOCALIDAD IS NOT NULL
+              AND LTRIM(RTRIM(c1.LOCALIDAD)) <> ''
+            ORDER BY c1.LOCALIDAD
+        """)
+        params = {"province": province}
+    else:
+        # If no province, return an empty list to avoid huge dropdowns.
+        return []
+
+    with engine.connect() as conn:
+        rows = conn.execute(sql, params).scalars().all()
+    return [r for r in rows if r]
+
+
+def get_epigraph_codes() -> list[str]:
+    engine = create_db_engine()
+    sql = text("""
+        SELECT DISTINCT c2.EPIGRAFE
+        FROM CENSO2 c2
+        WHERE c2.EPIGRAFE IS NOT NULL
+          AND LTRIM(RTRIM(c2.EPIGRAFE)) <> ''
+        ORDER BY c2.EPIGRAFE
+    """)
+    with engine.connect() as conn:
+        rows = conn.execute(sql).scalars().all()
+    return [str(r) for r in rows if r]
+
 
 def search_companies(
     reference_date: date,
     active_only: bool,
     province: Optional[str],
     city: Optional[str],
+    epigraph_codes: Optional[list[str]],
     limit: int = 200,
 ) -> list[dict[str, Any]]:
     """
-    Search companies applying the mandatory 'active' business rule via EXISTS on CENSO2:
-      F_INI <= reference_date AND F_FIN > reference_date
-    Filters:
-      - province (CENSO1.PROVINCIA)
-      - city (CENSO1.POBLACION)
-      - active_only (EXISTS in CENSO2 for reference_date)
+    CENSO1: one row per company (master data)
+    CENSO2: multiple rows per company (epigraph history) linked by DNI
+
+    Active rule (mandatory):
+      EXISTS in CENSO2 where F_INICIO <= reference_date AND F_FIN > reference_date
+    Epigraph filter:
+      If epigraph_codes provided -> company must have at least one matching EPIGRAFE
+      (and if active_only is also True, that matching record must be active in reference_date)
     """
     engine = create_db_engine()
 
     where_clauses: list[str] = []
     params: dict[str, Any] = {"limit": limit, "reference_date": reference_date}
 
+    # Master filters (CENSO1)
     if province:
         where_clauses.append("c1.PROVINCIA = :province")
         params["province"] = province
 
     if city:
-        where_clauses.append("c1.POBLACION = :city")
+        where_clauses.append("c1.LOCALIDAD = :city")
         params["city"] = city
 
+    # Build EXISTS conditions on CENSO2
+    exists_conditions: list[str] = ["c2.DNI = c1.DNI"]
+
     if active_only:
+        exists_conditions.append("c2.F_INICIO <= :reference_date")
+        exists_conditions.append("c2.F_FIN > :reference_date")
+
+    if epigraph_codes:
+        # Use expanding bind param for IN (...)
+        exists_conditions.append("c2.EPIGRAFE IN :epigraph_codes")
+        params["epigraph_codes"] = tuple(epigraph_codes)
+
+    # If active_only OR epigraph filter is enabled, apply EXISTS
+    if active_only or epigraph_codes:
         where_clauses.append(
-            """
-            EXISTS (
-                SELECT 1
-                FROM CENSO2 c2
-                WHERE c2.tax_id = c1.tax_id
-                  AND c2.F_INI <= :reference_date
-                  AND c2.F_FIN > :reference_date
-            )
-            """
+            "EXISTS (SELECT 1 FROM CENSO2 c2 WHERE " + " AND ".join(exists_conditions) + ")"
         )
 
     where_sql = ""
     if where_clauses:
         where_sql = "WHERE " + " AND ".join(f"({c})" for c in where_clauses)
 
-    sql = text(
-        f"""
+    sql = text(f"""
         SELECT TOP (:limit)
-            c1.tax_id,
+            c1.DNI AS dni,
             c1.NOMBRE AS nombre,
             c1.PROVINCIA AS provincia,
-            c1.POBLACION AS poblacion
+            c1.LOCALIDAD AS localidad
         FROM CENSO1 c1
         {where_sql}
-        ORDER BY c1.tax_id
-        """
-    )
+        ORDER BY c1.DNI
+    """)
 
     with engine.connect() as conn:
         rows = conn.execute(sql, params).mappings().all()
 
     return [dict(r) for r in rows]
-
+ 
