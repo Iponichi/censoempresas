@@ -1,5 +1,5 @@
 from __future__ import annotations
-
+from sqlalchemy import bindparam
 import os
 from dataclasses import dataclass
 
@@ -151,16 +151,7 @@ def search_companies(
     epigraph_codes: Optional[list[str]],
     limit: int = 200,
 ) -> list[dict[str, Any]]:
-    """
-    CENSO1: one row per company (master data)
-    CENSO2: multiple rows per company (epigraph history) linked by DNI
 
-    Active rule (mandatory):
-      EXISTS in CENSO2 where F_INICIO <= reference_date AND F_FIN > reference_date
-    Epigraph filter:
-      If epigraph_codes provided -> company must have at least one matching EPIGRAFE
-      (and if active_only is also True, that matching record must be active in reference_date)
-    """
     engine = create_db_engine()
 
     where_clauses: list[str] = []
@@ -175,7 +166,7 @@ def search_companies(
         where_clauses.append("c1.LOCALIDAD = :city")
         params["city"] = city
 
-    # Build EXISTS conditions on CENSO2
+    # EXISTS conditions on CENSO2
     exists_conditions: list[str] = ["c2.DNI = c1.DNI"]
 
     if active_only:
@@ -183,11 +174,10 @@ def search_companies(
         exists_conditions.append("c2.F_FIN > :reference_date")
 
     if epigraph_codes:
-        # Use expanding bind param for IN (...)
-        exists_conditions.append("c2.EPIGRAFE IN :epigraph_codes")
-        params["epigraph_codes"] = tuple(epigraph_codes)
+        params["epigraph_codes"] = [str(x) for x in epigraph_codes]  # nvarchar(7)
+        exists_conditions.append("c2.EPIGRAFE IN :epigraph_codes")     # sin paréntesis
 
-    # If active_only OR epigraph filter is enabled, apply EXISTS
+    # Apply EXISTS if needed
     if active_only or epigraph_codes:
         where_clauses.append(
             "EXISTS (SELECT 1 FROM CENSO2 c2 WHERE " + " AND ".join(exists_conditions) + ")"
@@ -208,8 +198,11 @@ def search_companies(
         ORDER BY c1.DNI
     """)
 
+    # Solo hace falta declarar el expanding si vas a usar epigraph_codes
+    if epigraph_codes:
+        sql = sql.bindparams(bindparam("epigraph_codes", expanding=True))
+
     with engine.connect() as conn:
         rows = conn.execute(sql, params).mappings().all()
 
     return [dict(r) for r in rows]
- 
