@@ -56,17 +56,31 @@ with st.sidebar:
         options=["Resumen por empresa", "Detalle por epígrafe"],
     )
 
-    provinces = [""] + cached_provinces()
+    try:
+        provinces = [""] + cached_provinces()
+    except Exception as ex:
+        st.error(f"Error cargando provincias: {ex}")
+        st.stop()
+
     province = st.selectbox("Provincia", options=provinces)
 
-    if province:
-        city_options = cached_cities(province)
-    else:
-        city_options = []
+    try:
+        if province:
+            city_options = cached_cities(province)
+        else:
+            city_options = []
+    except Exception as ex:
+        st.error(f"Error cargando localidades: {ex}")
+        st.stop()
 
     cities = st.multiselect("Localidades", options=city_options)
 
-    epigraph_options = cached_epigraph_options()
+    try:
+        epigraph_options = cached_epigraph_options()
+    except Exception as ex:
+        st.error(f"Error cargando epígrafes: {ex}")
+        st.stop()
+
     epigraph_labels = [item["label"] for item in epigraph_options]
 
     selected_epigraph_labels = st.multiselect(
@@ -82,10 +96,12 @@ with st.sidebar:
 
     search_clicked = st.button("Buscar", type="primary")
 
+
 st.caption(
     "Empresa activa: existe un registro en CENSO2 donde "
     "F_INICIO <= fecha y F_FIN > fecha."
 )
+
 
 if search_clicked:
     try:
@@ -120,8 +136,15 @@ if search_clicked:
         st.warning("No se han encontrado resultados.")
         st.stop()
 
-    st.subheader("Resultados")
-    st.dataframe(rows, use_container_width=True, hide_index=True)
+    st.markdown("### Resultados")
+
+    with st.container():
+        st.dataframe(
+            rows,
+            use_container_width=True,
+            hide_index=True,
+            height=500,
+        )
 
     output = io.StringIO()
     writer = csv.DictWriter(output, fieldnames=list(rows[0].keys()))
