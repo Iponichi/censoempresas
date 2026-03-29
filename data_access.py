@@ -1,16 +1,13 @@
 from __future__ import annotations
-from sqlalchemy import bindparam
+
 import os
 from dataclasses import dataclass
-
-from dotenv import load_dotenv
-from sqlalchemy import Engine, create_engine, text
-from sqlalchemy.engine import URL
-
 from datetime import date
 from typing import Any, Optional
 
-
+from dotenv import load_dotenv
+from sqlalchemy import Engine, bindparam, create_engine, text
+from sqlalchemy.engine import URL
 
 
 @dataclass(frozen=True)
@@ -24,10 +21,6 @@ class Db_config:
 
 
 def load_db_config() -> Db_config:
-    """
-    Load SQL Server settings from .env (never commit credentials).
-    Supports DB_MODE=real|demo without code changes.
-    """
     load_dotenv(override=True)
 
     db_mode = os.getenv("DB_MODE", "real").strip().lower()
@@ -78,7 +71,7 @@ def create_db_engine() -> Engine:
             "driver": cfg.driver,
             "TrustServerCertificate": "yes",
             "Encrypt": "no",
-            },
+        },
     )
 
     return create_engine(url, pool_pre_ping=True, future=True)
@@ -105,87 +98,98 @@ def get_provinces() -> list[str]:
 
 
 def get_cities(province: Optional[str]) -> list[str]:
-    """
-    If province is provided, returns cities for that province only.
-    """
     engine = create_db_engine()
 
-    if province:
-        sql = text("""
-            SELECT DISTINCT c1.LOCALIDAD
-            FROM CENSO1 c1
-            WHERE c1.PROVINCIA = :province
-              AND c1.LOCALIDAD IS NOT NULL
-              AND LTRIM(RTRIM(c1.LOCALIDAD)) <> ''
-            ORDER BY c1.LOCALIDAD
-        """)
-        params = {"province": province}
-    else:
-        # If no province, return an empty list to avoid huge dropdowns.
+    if not province:
         return []
+
+    sql = text("""
+        SELECT DISTINCT c1.LOCALIDAD
+        FROM CENSO1 c1
+        WHERE c1.PROVINCIA = :province
+          AND c1.LOCALIDAD IS NOT NULL
+          AND LTRIM(RTRIM(c1.LOCALIDAD)) <> ''
+        ORDER BY c1.LOCALIDAD
+    """)
+    params = {"province": province}
 
     with engine.connect() as conn:
         rows = conn.execute(sql, params).scalars().all()
+
     return [r for r in rows if r]
 
 
-def get_epigraph_codes() -> list[str]:
+def get_epigraph_options() -> list[dict[str, str]]:
     engine = create_db_engine()
     sql = text("""
-        SELECT DISTINCT c2.EPIGRAFE
+        SELECT DISTINCT
+            c2.EPIGRAFE AS codigo,
+            iae.NOMBRE AS nombre
         FROM CENSO2 c2
+        LEFT JOIN IAE iae
+            ON iae.EPIGRAFE = c2.EPIGRAFE
         WHERE c2.EPIGRAFE IS NOT NULL
           AND LTRIM(RTRIM(c2.EPIGRAFE)) <> ''
         ORDER BY c2.EPIGRAFE
     """)
     with engine.connect() as conn:
-        rows = conn.execute(sql).scalars().all()
-    return [str(r) for r in rows if r]
+        rows = conn.execute(sql).mappings().all()
 
+    return [
+        {
+            "codigo": str(r["codigo"]),
+            "label": f'{r["codigo"]} - {r["nombre"]}' if r["nombre"] else str(r["codigo"]),
+        }
+        for r in rows
+    ]
 
-def search_companies(
-    reference_date: date,
-    active_only: bool,
+def search_companies_summary(
+    temporal_mode: str,
+    reference_date: Optional[date],
+    date_from: Optional[date],
+    date_to: Optional[date],
     province: Optional[str],
-    city: Optional[str],
+    cities: Optional[list[str]],
     epigraph_codes: Optional[list[str]],
-    limit: int = 200,
+    limit: int = 500,
 ) -> list[dict[str, Any]]:
-
+    """
+    Una fila por empresa (CENSO1).
+    """
     engine = create_db_engine()
 
     where_clauses: list[str] = []
-    params: dict[str, Any] = {"limit": limit, "reference_date": reference_date}
+    params: dict[str, Any] = {"limit": limit}
 
-    # Master filters (CENSO1)
     if province:
         where_clauses.append("c1.PROVINCIA = :province")
         params["province"] = province
 
-    if city:
-        where_clauses.append("c1.LOCALIDAD = :city")
-        params["city"] = city
+    if cities:
+        where_clauses.append("c1.LOCALIDAD IN :cities")
+        params["cities"] = [str(x) for x in cities]
 
-    # EXISTS conditions on CENSO2
     exists_conditions: list[str] = ["c2.DNI = c1.DNI"]
 
-    if active_only:
+    if epigraph_codes:
+        exists_conditions.append("c2.EPIGRAFE IN :epigraph_codes")
+        params["epigraph_codes"] = [str(x) for x in epigraph_codes]
+
+    if temporal_mode == "date":
         exists_conditions.append("c2.F_INICIO <= :reference_date")
         exists_conditions.append("c2.F_FIN > :reference_date")
+        params["reference_date"] = reference_date
+    elif temporal_mode == "range":
+        exists_conditions.append("c2.F_INICIO <= :date_to")
+        exists_conditions.append("c2.F_FIN > :date_from")
+        params["date_from"] = date_from
+        params["date_to"] = date_to
 
-    if epigraph_codes:
-        params["epigraph_codes"] = [str(x) for x in epigraph_codes]  # nvarchar(7)
-        exists_conditions.append("c2.EPIGRAFE IN :epigraph_codes")     # sin paréntesis
+    where_clauses.append(
+        "EXISTS (SELECT 1 FROM CENSO2 c2 WHERE " + " AND ".join(exists_conditions) + ")"
+    )
 
-    # Apply EXISTS if needed
-    if active_only or epigraph_codes:
-        where_clauses.append(
-            "EXISTS (SELECT 1 FROM CENSO2 c2 WHERE " + " AND ".join(exists_conditions) + ")"
-        )
-
-    where_sql = ""
-    if where_clauses:
-        where_sql = "WHERE " + " AND ".join(f"({c})" for c in where_clauses)
+    where_sql = "WHERE " + " AND ".join(f"({c})" for c in where_clauses)
 
     sql = text(f"""
         SELECT TOP (:limit)
@@ -195,10 +199,83 @@ def search_companies(
             c1.LOCALIDAD AS localidad
         FROM CENSO1 c1
         {where_sql}
-        ORDER BY c1.DNI
+        ORDER BY c1.NOMBRE
     """)
 
-    # Solo hace falta declarar el expanding si vas a usar epigraph_codes
+    if cities:
+        sql = sql.bindparams(bindparam("cities", expanding=True))
+    if epigraph_codes:
+        sql = sql.bindparams(bindparam("epigraph_codes", expanding=True))
+
+    with engine.connect() as conn:
+        rows = conn.execute(sql, params).mappings().all()
+
+    return [dict(r) for r in rows]
+
+
+def search_companies_detail(
+    temporal_mode: str,
+    reference_date: Optional[date],
+    date_from: Optional[date],
+    date_to: Optional[date],
+    province: Optional[str],
+    cities: Optional[list[str]],
+    epigraph_codes: Optional[list[str]],
+    limit: int = 1000,
+) -> list[dict[str, Any]]:
+    """
+    Una fila por epígrafe válido (JOIN CENSO1 + CENSO2).
+    """
+    engine = create_db_engine()
+
+    where_clauses: list[str] = ["c2.DNI = c1.DNI"]
+    params: dict[str, Any] = {"limit": limit}
+
+    if province:
+        where_clauses.append("c1.PROVINCIA = :province")
+        params["province"] = province
+
+    if cities:
+        where_clauses.append("c1.LOCALIDAD IN :cities")
+        params["cities"] = [str(x) for x in cities]
+
+    if epigraph_codes:
+        where_clauses.append("c2.EPIGRAFE IN :epigraph_codes")
+        params["epigraph_codes"] = [str(x) for x in epigraph_codes]
+
+    if temporal_mode == "date":
+        where_clauses.append("c2.F_INICIO <= :reference_date")
+        where_clauses.append("c2.F_FIN > :reference_date")
+        params["reference_date"] = reference_date
+    elif temporal_mode == "range":
+        where_clauses.append("c2.F_INICIO <= :date_to")
+        where_clauses.append("c2.F_FIN > :date_from")
+        params["date_from"] = date_from
+        params["date_to"] = date_to
+
+    where_sql = "WHERE " + " AND ".join(f"({c})" for c in where_clauses)
+
+    sql = text(f"""
+        SELECT TOP (:limit)
+            c1.DNI AS dni,
+            c1.NOMBRE AS nombre,
+            c1.PROVINCIA AS provincia,
+            c1.LOCALIDAD AS localidad,
+            c2.EPIGRAFE AS epigrafe,
+            iae.NOMBRE AS nombre_epigrafe,
+            c2.F_INICIO AS f_inicio,
+            c2.F_FIN AS f_fin
+        FROM CENSO1 c1
+        JOIN CENSO2 c2
+            ON c2.DNI = c1.DNI
+        LEFT JOIN IAE iae
+            ON iae.EPIGRAFE = c2.EPIGRAFE
+        {where_sql}
+        ORDER BY c1.NOMBRE, c2.EPIGRAFE, c2.F_INICIO
+    """)
+
+    if cities:
+        sql = sql.bindparams(bindparam("cities", expanding=True))
     if epigraph_codes:
         sql = sql.bindparams(bindparam("epigraph_codes", expanding=True))
 
