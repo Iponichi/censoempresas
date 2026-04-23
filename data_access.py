@@ -11,7 +11,7 @@ from sqlalchemy.engine import URL
 
 
 @dataclass(frozen=True)
-class Db_config:
+class DbConfig:
     host: str
     port: int
     database: str
@@ -20,7 +20,7 @@ class Db_config:
     driver: str
 
 
-def load_db_config() -> Db_config:
+def load_db_config() -> DbConfig:
     load_dotenv(override=True)
 
     db_mode = os.getenv("DB_MODE", "real").strip().lower()
@@ -34,20 +34,28 @@ def load_db_config() -> Db_config:
     database = os.getenv(f"DB_NAME{suffix}") or os.getenv("DB_NAME")
     username = os.getenv(f"DB_USER{suffix}") or os.getenv("DB_USER")
     password = os.getenv(f"DB_PASSWORD{suffix}") or os.getenv("DB_PASSWORD")
-    driver = os.getenv(f"DB_DRIVER{suffix}") or os.getenv("DB_DRIVER") or "ODBC Driver 17 for SQL Server"
+    driver = (
+        os.getenv(f"DB_DRIVER{suffix}")
+        or os.getenv("DB_DRIVER")
+        or "ODBC Driver 17 for SQL Server"
+    )
 
-    missing = [k for k, v in {
-        "DB_HOST": host,
-        "DB_NAME": database,
-        "DB_USER": username,
-        "DB_PASSWORD": password,
-        "DB_DRIVER": driver,
-    }.items() if not v]
+    missing = [
+        key
+        for key, value in {
+            "DB_HOST": host,
+            "DB_NAME": database,
+            "DB_USER": username,
+            "DB_PASSWORD": password,
+            "DB_DRIVER": driver,
+        }.items()
+        if not value
+    ]
 
     if missing:
         raise ValueError(f"Missing env vars: {', '.join(missing)} (mode={db_mode})")
 
-    return Db_config(
+    return DbConfig(
         host=host,
         port=int(port_str),
         database=database,
@@ -85,6 +93,7 @@ def test_connection(engine: Engine) -> str:
 
 def get_provinces() -> list[str]:
     engine = create_db_engine()
+
     sql = text("""
         SELECT DISTINCT c1.PROVINCIA
         FROM CENSO1 c1
@@ -92,16 +101,18 @@ def get_provinces() -> list[str]:
           AND LTRIM(RTRIM(c1.PROVINCIA)) <> ''
         ORDER BY c1.PROVINCIA
     """)
+
     with engine.connect() as conn:
         rows = conn.execute(sql).scalars().all()
-    return [r for r in rows if r]
+
+    return [str(row) for row in rows if row]
 
 
 def get_cities(province: Optional[str]) -> list[str]:
-    engine = create_db_engine()
-
     if not province:
         return []
+
+    engine = create_db_engine()
 
     sql = text("""
         SELECT DISTINCT c1.LOCALIDAD
@@ -111,16 +122,18 @@ def get_cities(province: Optional[str]) -> list[str]:
           AND LTRIM(RTRIM(c1.LOCALIDAD)) <> ''
         ORDER BY c1.LOCALIDAD
     """)
+
     params = {"province": province}
 
     with engine.connect() as conn:
         rows = conn.execute(sql, params).scalars().all()
 
-    return [r for r in rows if r]
+    return [str(row) for row in rows if row]
 
 
 def get_epigraph_options() -> list[dict[str, str]]:
     engine = create_db_engine()
+
     sql = text("""
         SELECT DISTINCT
             c2.EPIGRAFE AS codigo,
@@ -132,16 +145,23 @@ def get_epigraph_options() -> list[dict[str, str]]:
           AND LTRIM(RTRIM(c2.EPIGRAFE)) <> ''
         ORDER BY c2.EPIGRAFE
     """)
+
     with engine.connect() as conn:
         rows = conn.execute(sql).mappings().all()
 
     return [
         {
-            "codigo": str(r["codigo"]),
-            "label": f'{r["codigo"]} - {r["nombre"]}' if r["nombre"] else str(r["codigo"]),
+            "codigo": str(row["codigo"]),
+            "nombre": str(row["nombre"]).strip() if row["nombre"] else "",
+            "label": (
+                f'{row["codigo"]} - {row["nombre"]}'
+                if row["nombre"]
+                else str(row["codigo"])
+            ),
         }
-        for r in rows
+        for row in rows
     ]
+
 
 def search_companies_summary(
     temporal_mode: str,
@@ -154,7 +174,10 @@ def search_companies_summary(
     limit: int = 500,
 ) -> list[dict[str, Any]]:
     """
-    Una fila por empresa (CENSO1).
+    One row per company (CENSO1).
+    A company is active when there is at least one row in CENSO2
+    with F_INICIO <= reference_date and F_FIN > reference_date.
+    For range mode, rows overlapping the selected range are returned.
     """
     engine = create_db_engine()
 
@@ -167,29 +190,39 @@ def search_companies_summary(
 
     if cities:
         where_clauses.append("c1.LOCALIDAD IN :cities")
-        params["cities"] = [str(x) for x in cities]
+        params["cities"] = [str(city) for city in cities]
 
     exists_conditions: list[str] = ["c2.DNI = c1.DNI"]
 
     if epigraph_codes:
         exists_conditions.append("c2.EPIGRAFE IN :epigraph_codes")
-        params["epigraph_codes"] = [str(x) for x in epigraph_codes]
+        params["epigraph_codes"] = [str(code) for code in epigraph_codes]
 
     if temporal_mode == "date":
+        if reference_date is None:
+            raise ValueError("reference_date is required when temporal_mode='date'.")
+
         exists_conditions.append("c2.F_INICIO <= :reference_date")
         exists_conditions.append("c2.F_FIN > :reference_date")
         params["reference_date"] = reference_date
+
     elif temporal_mode == "range":
+        if date_from is None or date_to is None:
+            raise ValueError("date_from and date_to are required when temporal_mode='range'.")
+
         exists_conditions.append("c2.F_INICIO <= :date_to")
         exists_conditions.append("c2.F_FIN > :date_from")
         params["date_from"] = date_from
         params["date_to"] = date_to
 
+    else:
+        raise ValueError("temporal_mode must be 'date' or 'range'.")
+
     where_clauses.append(
         "EXISTS (SELECT 1 FROM CENSO2 c2 WHERE " + " AND ".join(exists_conditions) + ")"
     )
 
-    where_sql = "WHERE " + " AND ".join(f"({c})" for c in where_clauses)
+    where_sql = "WHERE " + " AND ".join(f"({clause})" for clause in where_clauses)
 
     sql = text(f"""
         SELECT TOP (:limit)
@@ -210,7 +243,7 @@ def search_companies_summary(
     with engine.connect() as conn:
         rows = conn.execute(sql, params).mappings().all()
 
-    return [dict(r) for r in rows]
+    return [dict(row) for row in rows]
 
 
 def search_companies_detail(
@@ -224,7 +257,9 @@ def search_companies_detail(
     limit: int = 1000,
 ) -> list[dict[str, Any]]:
     """
-    Una fila por epígrafe válido (JOIN CENSO1 + CENSO2).
+    One row per epigraph record (JOIN CENSO1 + CENSO2).
+    In date mode, active records for the reference date are returned.
+    In range mode, records overlapping the selected range are returned.
     """
     engine = create_db_engine()
 
@@ -237,23 +272,33 @@ def search_companies_detail(
 
     if cities:
         where_clauses.append("c1.LOCALIDAD IN :cities")
-        params["cities"] = [str(x) for x in cities]
+        params["cities"] = [str(city) for city in cities]
 
     if epigraph_codes:
         where_clauses.append("c2.EPIGRAFE IN :epigraph_codes")
-        params["epigraph_codes"] = [str(x) for x in epigraph_codes]
+        params["epigraph_codes"] = [str(code) for code in epigraph_codes]
 
     if temporal_mode == "date":
+        if reference_date is None:
+            raise ValueError("reference_date is required when temporal_mode='date'.")
+
         where_clauses.append("c2.F_INICIO <= :reference_date")
         where_clauses.append("c2.F_FIN > :reference_date")
         params["reference_date"] = reference_date
+
     elif temporal_mode == "range":
+        if date_from is None or date_to is None:
+            raise ValueError("date_from and date_to are required when temporal_mode='range'.")
+
         where_clauses.append("c2.F_INICIO <= :date_to")
         where_clauses.append("c2.F_FIN > :date_from")
         params["date_from"] = date_from
         params["date_to"] = date_to
 
-    where_sql = "WHERE " + " AND ".join(f"({c})" for c in where_clauses)
+    else:
+        raise ValueError("temporal_mode must be 'date' or 'range'.")
+
+    where_sql = "WHERE " + " AND ".join(f"({clause})" for clause in where_clauses)
 
     sql = text(f"""
         SELECT TOP (:limit)
@@ -282,4 +327,4 @@ def search_companies_detail(
     with engine.connect() as conn:
         rows = conn.execute(sql, params).mappings().all()
 
-    return [dict(r) for r in rows]
+    return [dict(row) for row in rows]
