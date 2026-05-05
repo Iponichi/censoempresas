@@ -14,7 +14,10 @@ from data_access import (
 )
 
 st.set_page_config(page_title="Censo de Empresas", layout="wide")
-
+st.markdown(
+    '<meta name="google" content="notranslate">',
+    unsafe_allow_html=True,
+)
 st.markdown(
     """
     <style>
@@ -168,6 +171,50 @@ st.markdown(
     section[data-testid="stSidebar"] [data-testid="stCaptionContainer"] {
         margin-top: 0.15rem !important;
         margin-bottom: 0.2rem !important;
+    }
+        /* Calendario emergente del date_input */
+    div[data-baseweb="calendar"] {
+        background-color: #B10F2E !important;
+        color: white !important;
+    }
+
+    div[data-baseweb="calendar"] * {
+        color: white !important;
+    }
+
+    /* Cabecera del calendario: mes, año, flechas */
+    div[data-baseweb="calendar"] header,
+    div[data-baseweb="calendar"] header *,
+    div[data-baseweb="calendar"] [role="button"],
+    div[data-baseweb="calendar"] button {
+        color: white !important;
+    }
+
+    /* Nombres de días de la semana */
+    div[data-baseweb="calendar"] thead th,
+    div[data-baseweb="calendar"] thead th * {
+        color: white !important;
+        font-weight: 700 !important;
+    }
+
+    /* Días del mes */
+    div[data-baseweb="calendar"] tbody td,
+    div[data-baseweb="calendar"] tbody td * {
+        color: #2B161A !important;
+    }
+
+    /* Día seleccionado */
+    div[data-baseweb="calendar"] [aria-selected="true"],
+    div[data-baseweb="calendar"] [aria-selected="true"] * {
+        background-color: #8E0C25 !important;
+        color: white !important;
+        border-radius: 999px !important;
+    }
+
+    /* Fondo interior del cuerpo del calendario */
+    div[data-baseweb="calendar"] table {
+        background-color: #FFF8F8 !important;
+        border-radius: 0.4rem !important;
     }
     </style>
     """,
