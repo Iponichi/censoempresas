@@ -182,15 +182,21 @@ def search_companies_summary(
     engine = create_db_engine()
 
     where_clauses: list[str] = []
-    params: dict[str, Any] = {"limit": limit}
+    params: dict[str, Any] = {}
 
     if province:
         where_clauses.append("c1.PROVINCIA = :province")
         params["province"] = province
 
     if cities:
-        where_clauses.append("c1.LOCALIDAD IN :cities")
-        params["cities"] = [str(city) for city in cities]
+        city_conditions: list[str] = []
+
+    for index, city in enumerate(cities):
+        param_name = f"city_{index}"
+        city_conditions.append(f"c1.LOCALIDAD LIKE :{param_name}")
+        params[param_name] = f"%{str(city)}%"
+
+    where_clauses.append("(" + " OR ".join(city_conditions) + ")")
 
     exists_conditions: list[str] = ["c2.DNI = c1.DNI"]
 
@@ -225,7 +231,7 @@ def search_companies_summary(
     where_sql = "WHERE " + " AND ".join(f"({clause})" for clause in where_clauses)
 
     sql = text(f"""
-        SELECT TOP (:limit)
+        SELECT 
             c1.DNI AS dni,
             c1.NOMBRE AS nombre,
             c1.PROVINCIA AS provincia,
@@ -235,8 +241,7 @@ def search_companies_summary(
         ORDER BY c1.NOMBRE
     """)
 
-    if cities:
-        sql = sql.bindparams(bindparam("cities", expanding=True))
+  
     if epigraph_codes:
         sql = sql.bindparams(bindparam("epigraph_codes", expanding=True))
 
@@ -264,15 +269,21 @@ def search_companies_detail(
     engine = create_db_engine()
 
     where_clauses: list[str] = ["c2.DNI = c1.DNI"]
-    params: dict[str, Any] = {"limit": limit}
+    params: dict[str, Any] = {}
 
     if province:
         where_clauses.append("c1.PROVINCIA = :province")
         params["province"] = province
 
     if cities:
-        where_clauses.append("c1.LOCALIDAD IN :cities")
-        params["cities"] = [str(city) for city in cities]
+        city_conditions: list[str] = []
+
+        for index, city in enumerate(cities):
+            param_name = f"city_{index}"
+            city_conditions.append(f"c1.LOCALIDAD LIKE :{param_name}")
+            params[param_name] = f"%{str(city)}%"
+
+    where_clauses.append("(" + " OR ".join(city_conditions) + ")")
 
     if epigraph_codes:
         where_clauses.append("c2.EPIGRAFE IN :epigraph_codes")
@@ -301,7 +312,7 @@ def search_companies_detail(
     where_sql = "WHERE " + " AND ".join(f"({clause})" for clause in where_clauses)
 
     sql = text(f"""
-        SELECT TOP (:limit)
+        SELECT 
             c1.DNI AS dni,
             c1.NOMBRE AS nombre,
             c1.PROVINCIA AS provincia,
@@ -319,8 +330,6 @@ def search_companies_detail(
         ORDER BY c1.NOMBRE, c2.EPIGRAFE, c2.F_INICIO
     """)
 
-    if cities:
-        sql = sql.bindparams(bindparam("cities", expanding=True))
     if epigraph_codes:
         sql = sql.bindparams(bindparam("epigraph_codes", expanding=True))
 

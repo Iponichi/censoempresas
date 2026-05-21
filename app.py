@@ -172,22 +172,19 @@ st.markdown(
         margin-top: 0.15rem !important;
         margin-bottom: 0.2rem !important;
     }
-        /* Calendario emergente del date_input */
+               /* Calendario emergente del date_input */
     div[data-baseweb="calendar"] {
         background-color: #B10F2E !important;
-        color: white !important;
-    }
-
-    div[data-baseweb="calendar"] * {
         color: white !important;
     }
 
     /* Cabecera del calendario: mes, año, flechas */
     div[data-baseweb="calendar"] header,
     div[data-baseweb="calendar"] header *,
-    div[data-baseweb="calendar"] [role="button"],
-    div[data-baseweb="calendar"] button {
+    div[data-baseweb="calendar"] button,
+    div[data-baseweb="calendar"] button * {
         color: white !important;
+        fill: white !important;
     }
 
     /* Nombres de días de la semana */
@@ -197,24 +194,53 @@ st.markdown(
         font-weight: 700 !important;
     }
 
-    /* Días del mes */
-    div[data-baseweb="calendar"] tbody td,
-    div[data-baseweb="calendar"] tbody td * {
-        color: #2B161A !important;
+    /* Fondo del cuerpo del calendario */
+    div[data-baseweb="calendar"] table,
+    div[data-baseweb="calendar"] tbody,
+    div[data-baseweb="calendar"] tr,
+    div[data-baseweb="calendar"] td {
+        background-color: #B10F2E !important;
     }
 
-    /* Día seleccionado */
-    div[data-baseweb="calendar"] [aria-selected="true"],
-    div[data-baseweb="calendar"] [aria-selected="true"] * {
-        background-color: #8E0C25 !important;
+    /* Días normales */
+    div[data-baseweb="calendar"] td,
+    div[data-baseweb="calendar"] td * {
         color: white !important;
+    }
+
+    /* Botón real de cada día */
+    div[data-baseweb="calendar"] td button,
+    div[data-baseweb="calendar"] td button * {
+        color: white !important;
+        background: transparent !important;
         border-radius: 999px !important;
     }
 
-    /* Fondo interior del cuerpo del calendario */
-    div[data-baseweb="calendar"] table {
-        background-color: #FFF8F8 !important;
-        border-radius: 0.4rem !important;
+    /* Hover */
+    div[data-baseweb="calendar"] td button:hover,
+    div[data-baseweb="calendar"] td button:hover * {
+        background-color: #F7F1F2 !important;
+        color: #2B161A !important;
+        fill: #2B161A !important;
+        border-radius: 999px !important;
+    }
+
+    /* Día seleccionado */
+    div[data-baseweb="calendar"] td button[aria-selected="true"],
+    div[data-baseweb="calendar"] td button[aria-selected="true"] * {
+        background-color: #F7F1F2 !important;
+        color: #2B161A !important;
+        fill: #2B161A !important;
+        font-weight: 700 !important;
+        border-radius: 999px !important;
+    }
+
+    /* Día seleccionado al pasar por encima */
+    div[data-baseweb="calendar"] td button[aria-selected="true"]:hover,
+    div[data-baseweb="calendar"] td button[aria-selected="true"]:hover * {
+        background-color: #EEDFE2 !important;
+        color: #2B161A !important;
+        fill: #2B161A !important;
     }
     </style>
     """,
@@ -565,11 +591,12 @@ if search_clicked:
         with top_left:
             st.caption("Puedes ordenar los resultados pulsando en la cabecera de cada columna.")
 
+        formatted_total = f"{len(rows):,}".replace(",", ".")
         with top_right:
             st.markdown(
                 f"<div style='text-align: right; margin-top: 0.2rem; "
                 f"font-size: 0.95rem; color: #8a7b7f;'>"
-                f"Total de registros: <strong>{len(rows)}</strong>"
+                f"Total de registros: <strong>{formatted_total}</strong>"
                 f"</div>",
                 unsafe_allow_html=True,
             )
