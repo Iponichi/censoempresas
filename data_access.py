@@ -91,15 +91,17 @@ def test_connection(engine: Engine) -> str:
     return f"Connected (SELECT 1 returned {value})"
 
 
-def get_provinces() -> list[str]:
+def get_provinces(view_mode: str) -> list[str]:
     engine = create_db_engine()
 
-    sql = text("""
-        SELECT DISTINCT c1.PROVINCIA
-        FROM CENSO1 c1
-        WHERE c1.PROVINCIA IS NOT NULL
-          AND LTRIM(RTRIM(c1.PROVINCIA)) <> ''
-        ORDER BY c1.PROVINCIA
+    table_name = "CENSO1" if view_mode == "summary" else "CENSO2"
+
+    sql = text(f"""
+        SELECT DISTINCT PROVINCIA
+        FROM {table_name}
+        WHERE PROVINCIA IS NOT NULL
+          AND LTRIM(RTRIM(PROVINCIA)) <> ''
+        ORDER BY PROVINCIA
     """)
 
     with engine.connect() as conn:
@@ -108,19 +110,21 @@ def get_provinces() -> list[str]:
     return [str(row) for row in rows if row]
 
 
-def get_cities(province: Optional[str]) -> list[str]:
+def get_cities(province: Optional[str], view_mode: str) -> list[str]:
     if not province:
         return []
 
     engine = create_db_engine()
 
-    sql = text("""
-        SELECT DISTINCT c1.LOCALIDAD
-        FROM CENSO1 c1
-        WHERE c1.PROVINCIA = :province
-          AND c1.LOCALIDAD IS NOT NULL
-          AND LTRIM(RTRIM(c1.LOCALIDAD)) <> ''
-        ORDER BY c1.LOCALIDAD
+    table_name = "CENSO1" if view_mode == "summary" else "CENSO2"
+
+    sql = text(f"""
+        SELECT DISTINCT LOCALIDAD
+        FROM {table_name}
+        WHERE PROVINCIA = :province
+          AND LOCALIDAD IS NOT NULL
+          AND LTRIM(RTRIM(LOCALIDAD)) <> ''
+        ORDER BY LOCALIDAD
     """)
 
     params = {"province": province}

@@ -257,13 +257,13 @@ with header_col_right:
 
 
 @st.cache_data(ttl=1800)
-def cached_provinces() -> list[str]:
-    return get_provinces()
+def cached_provinces(view_mode_key: str) -> list[str]:
+    return get_provinces(view_mode_key)
 
 
 @st.cache_data(ttl=1800)
-def cached_cities(province: str) -> list[str]:
-    return get_cities(province)
+def cached_cities(province: str, view_mode_key: str) -> list[str]:
+    return get_cities(province, view_mode_key)
 
 
 @st.cache_data(ttl=1800)
@@ -431,18 +431,18 @@ with st.sidebar:
         "Modo de visualización",
         options=["Resumen por empresa", "Detalle por epígrafe"],
     )
-
+    view_mode_key = "summary" if view_mode == "Resumen por empresa" else "detail"
+    
     try:
-        provinces = [""] + cached_provinces()
+        provinces = [""] + cached_provinces(view_mode_key)
     except Exception as ex:
         st.error(f"Error cargando provincias: {ex}")
         st.stop()
-
     province = st.selectbox("Provincia", options=provinces)
 
     try:
         if province:
-            city_options = cached_cities(province)
+            city_options = cached_cities(province, view_mode_key)
         else:
             city_options = []
     except Exception as ex:
