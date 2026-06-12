@@ -195,12 +195,12 @@ def search_companies_summary(
     if cities:
         city_conditions: list[str] = []
 
-    for index, city in enumerate(cities):
-        param_name = f"city_{index}"
-        city_conditions.append(f"c1.LOCALIDAD LIKE :{param_name}")
-        params[param_name] = f"%{str(city)}%"
+        for index, city in enumerate(cities):
+            param_name = f"city_{index}"
+            city_conditions.append(f"c1.LOCALIDAD LIKE :{param_name}")
+            params[param_name] = f"%{str(city)}%"
 
-    where_clauses.append("(" + " OR ".join(city_conditions) + ")")
+        where_clauses.append("(" + " OR ".join(city_conditions) + ")")
 
     exists_conditions: list[str] = ["c2.DNI = c1.DNI"]
 
@@ -287,7 +287,7 @@ def search_companies_detail(
             city_conditions.append(f"c1.LOCALIDAD LIKE :{param_name}")
             params[param_name] = f"%{str(city)}%"
 
-    where_clauses.append("(" + " OR ".join(city_conditions) + ")")
+        where_clauses.append("(" + " OR ".join(city_conditions) + ")")
 
     if epigraph_codes:
         where_clauses.append("c2.EPIGRAFE IN :epigraph_codes")

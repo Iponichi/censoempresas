@@ -114,17 +114,20 @@ st.markdown(
         fill: #6A2C36 !important;
     }
 
-    /* Tags seleccionadas */
-    section[data-testid="stSidebar"] div[data-baseweb="tag"] {
-        background-color: #D94A63 !important;
-        color: white !important;
+    /* Tags seleccionadas del multiselect */
+    section[data-testid="stSidebar"] span[data-baseweb="tag"] {
+        background-color: #8E0C25 !important;
+        border: 1px solid #F0C7CF !important;
         border-radius: 0.35rem !important;
     }
 
-    section[data-testid="stSidebar"] div[data-baseweb="tag"] span,
-    section[data-testid="stSidebar"] div[data-baseweb="tag"] svg {
-        color: white !important;
-        fill: white !important;
+    section[data-testid="stSidebar"] span[data-baseweb="tag"] * {
+        color: #FFFFFF !important;
+        fill: #FFFFFF !important;
+    }
+
+    section[data-testid="stSidebar"] span[data-baseweb="tag"] span[title] {
+        color: #FFFFFF !important;
     }
 
     /* Botones */
@@ -172,46 +175,51 @@ st.markdown(
         margin-top: 0.15rem !important;
         margin-bottom: 0.2rem !important;
     }
-               /* Calendario emergente del date_input */
+
+    /* Calendario emergente del date_input */
     div[data-baseweb="calendar"] {
-        background-color: #B10F2E !important;
-        color: white !important;
+        background-color: #FFF8F8 !important;
+        color: #2B161A !important;
+        border: 1px solid #D8AAB4 !important;
+        border-radius: 0.45rem !important;
     }
 
-    /* Cabecera del calendario: mes, año, flechas */
+    /* Cabecera del calendario: mes, año y flechas */
     div[data-baseweb="calendar"] header,
     div[data-baseweb="calendar"] header *,
     div[data-baseweb="calendar"] button,
     div[data-baseweb="calendar"] button * {
-        color: white !important;
-        fill: white !important;
+        color: #2B161A !important;
+        fill: #2B161A !important;
+        background-color: #FFF8F8 !important;
     }
 
-    /* Nombres de días de la semana */
-    div[data-baseweb="calendar"] thead th,
-    div[data-baseweb="calendar"] thead th * {
-        color: white !important;
+    /* Nombres de los días del calendario */
+    div[data-baseweb="calendar"] div[alt] {
+        color: #FFFFFF !important;
+        fill: #FFFFFF !important;
         font-weight: 700 !important;
+        opacity: 1 !important;
     }
 
-    /* Fondo del cuerpo del calendario */
+    /* Fondo general del cuerpo del calendario */
     div[data-baseweb="calendar"] table,
     div[data-baseweb="calendar"] tbody,
     div[data-baseweb="calendar"] tr,
     div[data-baseweb="calendar"] td {
-        background-color: #B10F2E !important;
+        background-color: #FFF8F8 !important;
     }
 
     /* Días normales */
     div[data-baseweb="calendar"] td,
     div[data-baseweb="calendar"] td * {
-        color: white !important;
+        color: #2B161A !important;
     }
 
     /* Botón real de cada día */
     div[data-baseweb="calendar"] td button,
     div[data-baseweb="calendar"] td button * {
-        color: white !important;
+        color: #2B161A !important;
         background: transparent !important;
         border-radius: 999px !important;
     }
@@ -219,7 +227,7 @@ st.markdown(
     /* Hover */
     div[data-baseweb="calendar"] td button:hover,
     div[data-baseweb="calendar"] td button:hover * {
-        background-color: #F7F1F2 !important;
+        background-color: #F0C7CF !important;
         color: #2B161A !important;
         fill: #2B161A !important;
         border-radius: 999px !important;
@@ -228,9 +236,9 @@ st.markdown(
     /* Día seleccionado */
     div[data-baseweb="calendar"] td button[aria-selected="true"],
     div[data-baseweb="calendar"] td button[aria-selected="true"] * {
-        background-color: #F7F1F2 !important;
-        color: #2B161A !important;
-        fill: #2B161A !important;
+        background-color: #D94A63 !important;
+        color: #FFFFFF !important;
+        fill: #FFFFFF !important;
         font-weight: 700 !important;
         border-radius: 999px !important;
     }
@@ -238,9 +246,39 @@ st.markdown(
     /* Día seleccionado al pasar por encima */
     div[data-baseweb="calendar"] td button[aria-selected="true"]:hover,
     div[data-baseweb="calendar"] td button[aria-selected="true"]:hover * {
-        background-color: #EEDFE2 !important;
+        background-color: #B10F2E !important;
+        color: #FFFFFF !important;
+        fill: #FFFFFF !important;
+    }
+
+        /* Opciones reales del desplegable de Streamlit */
+    li[role="option"] {
+        background-color: #FFF8F8 !important;
         color: #2B161A !important;
-        fill: #2B161A !important;
+    }
+
+    li[role="option"] * {
+        color: #2B161A !important;
+    }
+
+    /* Opción seleccionada / resaltada */
+    li[role="option"][aria-selected="true"] {
+        background-color: #F08FA1 !important;
+        color: white !important;
+    }
+
+    li[role="option"][aria-selected="true"] * {
+        color: white !important;
+    }
+
+    /* Opción al pasar el ratón */
+    li[role="option"]:hover {
+        background-color: #F0C7CF !important;
+        color: #2B161A !important;
+    }
+
+    li[role="option"]:hover * {
+        color: #2B161A !important;
     }
     </style>
     """,
@@ -325,9 +363,11 @@ def remove_epigraph_from_selection(label_to_remove: str) -> None:
     ]
 
 
+def clear_epigraph_selection() -> None:
+    st.session_state.selected_epigraph_labels = []
+
 def clear_epigraph_search_text() -> None:
     st.session_state.epigraph_search_text = ""
-
 
 def convert_rows_to_csv(rows: list[dict[str, Any]]) -> str:
     if not rows:
@@ -434,11 +474,17 @@ with st.sidebar:
     view_mode_key = "summary" if view_mode == "Resumen por empresa" else "detail"
     
     try:
-        provinces = [""] + cached_provinces(view_mode_key)
+        provinces = cached_provinces(view_mode_key)
     except Exception as ex:
         st.error(f"Error cargando provincias: {ex}")
         st.stop()
-    province = st.selectbox("Provincia", options=provinces)
+
+    province = st.selectbox(
+        "Provincia",
+        options=provinces,
+        index=None,
+        placeholder="Elige una opción",
+    )
 
     try:
         if province:
@@ -449,7 +495,19 @@ with st.sidebar:
         st.error(f"Error cargando localidades: {ex}")
         st.stop()
 
-    cities = st.multiselect("Localidades", options=city_options)
+    if city_options:
+        cities = st.multiselect(
+            "Localidades",
+            options=city_options,
+            placeholder="Elige una o varias localidades",
+        )
+    else:
+        st.text_input(
+            "Localidades",
+            value="No hay localidades disponibles",
+            disabled=True,
+        )
+        cities = []
 
     try:
         epigraph_options = cached_epigraph_options()
@@ -480,10 +538,25 @@ with st.sidebar:
         if label not in st.session_state.selected_epigraph_labels
     ]
 
-    epigraphs_to_add = st.multiselect(
-        "Resultados encontrados",
-        options=available_epigraph_labels,
-    )
+    available_epigraph_labels = [
+    label
+    for label in filtered_epigraph_labels
+    if label not in st.session_state.selected_epigraph_labels
+]
+
+    if available_epigraph_labels:
+        epigraphs_to_add = st.multiselect(
+            "Resultados encontrados",
+            options=available_epigraph_labels,
+            placeholder="Elige uno o varios epígrafes",
+        )
+    else:
+        st.text_input(
+            "Resultados encontrados",
+            value="No hay resultados para añadir",
+            disabled=True,
+        )
+        epigraphs_to_add = []
 
     col_add, col_clear_search = st.columns(2)
 
@@ -495,27 +568,43 @@ with st.sidebar:
     with col_clear_search:
         st.button("Limpiar texto", on_click=clear_epigraph_search_text)
 
-
     st.caption(f"Coincidencias: {len(filtered_epigraph_labels)}")
 
-    selected_epigraph_labels = st.multiselect(
-        "Epígrafes seleccionados",
-        options=st.session_state.selected_epigraph_labels,
-        default=st.session_state.selected_epigraph_labels,
-        key="selected_epigraph_labels_widget",
-    )
-
-    st.session_state.selected_epigraph_labels = selected_epigraph_labels
+    if st.session_state.selected_epigraph_labels:
+        selected_epigraph_labels = st.multiselect(
+            "Epígrafes seleccionados",
+            options=st.session_state.selected_epigraph_labels,
+            default=st.session_state.selected_epigraph_labels,
+            key="selected_epigraph_labels_widget",
+            placeholder="Elige uno o varios epígrafes",
+        )
+        st.session_state.selected_epigraph_labels = selected_epigraph_labels
+    else:
+        st.text_input(
+            "Epígrafes seleccionados",
+            value="Ningún epígrafe seleccionado",
+            disabled=True,
+        )
 
     col_remove, col_clear_all = st.columns(2)
 
     with col_remove:
-        epigraph_to_remove = st.selectbox(
-            "Quitar uno",
-            options=[""] + st.session_state.selected_epigraph_labels,
-            index=0,
-            key="epigraph_to_remove",
-        )
+        if st.session_state.selected_epigraph_labels:
+            epigraph_to_remove = st.selectbox(
+                "Quitar uno",
+                options=st.session_state.selected_epigraph_labels,
+                index=None,
+                key="epigraph_to_remove",
+                placeholder="Elige un epígrafe",
+            )
+        else:
+            st.text_input(
+                "Quitar uno",
+                value="No hay epígrafes para quitar",
+                disabled=True,
+            )
+            epigraph_to_remove = None
+
         if st.button("Quitar") and epigraph_to_remove:
             remove_epigraph_from_selection(epigraph_to_remove)
             st.rerun()
